@@ -39,17 +39,17 @@ def refine_query_with_model(query: str) -> str:
     return refined if refined else query
 
 def extract_item_name(image: Image.Image) -> str:
-    try:
-        if torch.cuda.is_available():
-            free_mem = torch.cuda.mem_get_info()[0] / (1024**3)
-            if free_mem > 6:
-                processor2, model2 = load_blip2_model()
-                inputs2 = processor2(image, return_tensors="pt").to(model2.device)
-                out2 = model2.generate(**inputs2, max_new_tokens=50)
-                caption2 = processor2.batch_decode(out2, skip_special_tokens=True)[0]
-                return caption2
-    except Exception as e:
-        st.warning(f"⚠️ BLIP-2 failed, falling back to BLIP. Error: {e}")
+    # try:
+    #     if torch.cuda.is_available():
+    #         free_mem = torch.cuda.mem_get_info()[0] / (1024**3)
+    #         if free_mem > 6:
+    #             processor2, model2 = load_blip2_model()
+    #             inputs2 = processor2(image, return_tensors="pt").to(model2.device)
+    #             out2 = model2.generate(**inputs2, max_new_tokens=50)
+    #             caption2 = processor2.batch_decode(out2, skip_special_tokens=True)[0]
+    #             return caption2
+    # except Exception as e:
+    #     st.warning(f"⚠️ BLIP-2 failed, falling back to BLIP. Error: {e}")
 
     processor, model = load_blip_model()
     inputs = processor(image, return_tensors="pt")
@@ -152,7 +152,7 @@ st.write(
     """
 )
 
-serp_api_key = st.secrets["serp_api_key"]  # replace with your key
+serp_api_key = st.secrets["serp_api_key"] 
 
 uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 
