@@ -4,9 +4,8 @@ import streamlit as st
 import requests
 from PIL import Image
 import torch
-from transformers import (
-    BlipProcessor, BlipForConditionalGeneration
-)
+from transformers import BlipProcessor, BlipForConditionalGeneration
+
 
 # ---------------- Step 1: Load Models ----------------
 @st.cache_resource
