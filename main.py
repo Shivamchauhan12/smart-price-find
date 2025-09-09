@@ -99,6 +99,16 @@ def fetch_prices_from_amazon_google(query: str, serp_api_key: str):
     return results
 
 # ---------------- Step 3: Streamlit UI ----------------
+# Hide Streamlit's default toolbar and "Made with Streamlit" footer
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}    /* hides the menu */
+    header {visibility: hidden;}       /* hides the top header */
+    footer {visibility: hidden;}       /* hides the footer */
+    [data-testid="stToolbar"] {display: none;}  /* hides deploy/share/toolbar icons */
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 st.set_page_config(
     page_title="Smart Price Finder",
     page_icon="🛒",
