@@ -1,4 +1,3 @@
-protobuf<5
 Pillow>=10.0.0
 requests>=2.31.0
 accelerate>=0.33.0
