@@ -1,6 +1,6 @@
-streamlit==1.37.1
-torch==2.3.1
-transformers==4.42.3
-pillow==10.4.0
-requests==2.32.3
-accelerate==0.31.0
+streamlit>=1.36.0
+transformers>=4.56.0
+torch>=2.2.0
+Pillow>=10.0.0
+requests>=2.31.0
+accelerate>=0.33.0
