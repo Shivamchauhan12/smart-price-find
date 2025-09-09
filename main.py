@@ -147,6 +147,9 @@ st.write(
 
 serp_api_key = st.secrets["serp_api_key"] 
 
+if(serp_api_key):
+    print("key")
+
 uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 
 # ---------------- Step 4: Session State ----------------
