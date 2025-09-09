@@ -1,13 +1,11 @@
 import os
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
-serp_api_key = os.getenv("SERP_API_KEY")
 import streamlit as st
 import requests
 from PIL import Image
 import torch
 from transformers import (
-    BlipProcessor, BlipForConditionalGeneration,
-    pipeline
+    BlipProcessor, BlipForConditionalGeneration
 )
 
 # ---------------- Step 1: Load Models ----------------
@@ -16,30 +14,13 @@ def load_blip_model():
     processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base", use_fast=False)
     model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
     return processor, model
- 
-
-@st.cache_resource
-def load_text_refiner():
-    return pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
-
-# ---------------- Step 2: Helper Functions ----------------
-def refine_query_with_model(query: str) -> str:
-    ner = load_text_refiner()
-    entities = ner(query)
-    refined = " ".join([ent["word"] for ent in entities])
-    return refined if refined else query
-
 
 def extract_item_name(image: Image.Image) -> str:
-    try:
-        processor, model = load_blip_model()
-        inputs = processor(image, return_tensors="pt")
-        out = model.generate(**inputs, max_new_tokens=50)
-        caption = processor.decode(out[0], skip_special_tokens=True)
-        return caption
-    except Exception as e:
-        st.error(f"❌ Failed to detect item: {e}")
-        return "unknown product"
+    processor, model = load_blip_model()
+    inputs = processor(image, return_tensors="pt")
+    out = model.generate(**inputs, max_new_tokens=50)
+    caption = processor.decode(out[0], skip_special_tokens=True)
+    return caption
 
 def fetch_youtube_videos(query: str, serp_api_key: str, max_results=3):
     params = {"engine": "youtube", "search_query": query, "api_key": serp_api_key, "hl": "en", "gl": "in"}
@@ -136,10 +117,7 @@ st.write(
     """
 )
 
-serp_api_key = serp_api_key 
-
-if(serp_api_key):
-    print("key")
+serp_api_key = "c13806221e28614562c5f1b9771ec05974b4fb24c1b292f8c1c9dd916f02304b"  # replace with your key
 
 uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 
@@ -165,8 +143,7 @@ if uploaded_file:
     if not st.session_state.user_query:
         with st.spinner("🔍 Detecting item..."):
             detected_item = extract_item_name(image)
-            refined = refine_query_with_model(detected_item)
-            st.session_state.user_query = refined
+            st.session_state.user_query = detected_item
 
     user_query = st.text_area("✍️ Refine description", key="user_query")
 
