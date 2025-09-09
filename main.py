@@ -114,7 +114,7 @@ st.set_page_config(
     page_icon="🛒",
     layout="wide"
 )
-st.title("🛒 Smart Price Finder from a Single Image")
+st.title("🛒 Smart Price Finder from a Image")
 st.write(
     """
     Upload **product image**, and I’ll do the rest:
