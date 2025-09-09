@@ -1,12 +1,12 @@
 import os
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
+serp_api_key = os.getenv("SERP_API_KEY")
 import streamlit as st
 import requests
 from PIL import Image
 import torch
 from transformers import (
     BlipProcessor, BlipForConditionalGeneration,
-    Blip2Processor, Blip2ForConditionalGeneration,
     pipeline
 )
 
@@ -16,16 +16,7 @@ def load_blip_model():
     processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base", use_fast=False)
     model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
     return processor, model
-
-@st.cache_resource
-def load_blip2_model():
-    processor2 = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b", use_fast=False)
-    model2 = Blip2ForConditionalGeneration.from_pretrained(
-        "Salesforce/blip2-opt-2.7b",
-        dtype=torch.float16,
-        device_map="auto"
-    )
-    return processor2, model2
+ 
 
 @st.cache_resource
 def load_text_refiner():
@@ -145,7 +136,7 @@ st.write(
     """
 )
 
-serp_api_key = st.secrets["serp_api_key"] 
+serp_api_key = serp_api_key 
 
 if(serp_api_key):
     print("key")
