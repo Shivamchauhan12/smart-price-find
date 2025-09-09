@@ -4,7 +4,7 @@ import streamlit as st
 import requests
 from PIL import Image
 import torch
-from transformers import BlipProcessor, BlipForConditionalGeneration
+from transformers.models.blip import BlipProcessor, BlipForConditionalGeneration
 
 
 # ---------------- Step 1: Load Models ----------------
