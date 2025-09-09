@@ -117,7 +117,7 @@ st.write(
     """
 )
 
-serp_api_key = "c13806221e28614562c5f1b9771ec05974b4fb24c1b292f8c1c9dd916f02304b"  # replace with your key
+serp_api_key = "serp_api_key"  # replace with your key
 
 uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 
