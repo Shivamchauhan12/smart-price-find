@@ -64,6 +64,14 @@ if uploaded_file:
     st.image(image, caption="Uploaded Image", width=300)
 
     # --- NEW: let user choose captioning method ---
+        st.markdown(
+        """
+        **ℹ️ Captioning Methods**
+        - 🔵 **Groq (Paid/Token-based)** → It may fail if quota is over.  
+        - 🟢 **BLIP (Free)** → Always available.  
+        """
+    )
+
     caption_method = st.radio(
         "Select captioning method:",
         ["Result from Groq", "Result from Blip"],
