@@ -1,73 +1,16 @@
 import os
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 import streamlit as st
-import requests
-import base64
-from groq import Groq
 from PIL import Image
-import torch
-from transformers.models.blip import BlipProcessor, BlipForConditionalGeneration
+from models.blip_model import extract_caption_with_blip
+from models.groq_client import extract_item_name_groq
+from services.product_service import fetch_prices_from_amazon_google, fetch_product_reviews
+from services.youtube_service import fetch_youtube_videos
+from utils.ui_helpers import apply_global_styles, render_video_grid
 
 
-# ---------------- Step 1: Load Models ----------------
-@st.cache_resource
-def load_blip_model():
-    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base", use_fast=False)
-    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-    return processor, model
 
-@st.cache_resource
-def load_groq_client():
-    return Groq(api_key=st.secrets["groq_api_key"])
-    
-
-def extract_item_name_groq(image: Image.Image):
-    """Try to get caption from Groq API (llama-4-scout)."""
-    client = load_groq_client()
-
-    import io, base64
-    buf = io.BytesIO()
-    image.save(buf, format="JPEG")
-    img_bytes = buf.getvalue()
-    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-
-    try:
-        response = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Describe the product in this image briefly (just the product and brand name, no extra text)."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{img_b64}"
-                            }
-                        }
-                    ],
-                }
-            ],
-            max_tokens=100,
-        )
-
-        # ✅ Use .content instead of ["content"]
-        print(response)
-        caption = response.choices[0].message.content.strip()
-        return caption, "Groq"
-
-    except Exception as e:
-        err_msg = str(e).lower()
-        if "rate limit" in err_msg or "quota" in err_msg or "429" in err_msg:
-            print("⚠️ Groq quota/rate limit exceeded, falling back to BLIP.")
-            return None, None
-        else:
-            print("❌ Groq error:", e)
-            return None, None
-
+# ---------------- Step 1: Load Models ----------------    
 def extract_item_name(image: Image.Image):
     # Try Groq first
     caption, source = extract_item_name_groq(image)
@@ -75,113 +18,17 @@ def extract_item_name(image: Image.Image):
         return caption, source
 
     # Fallback → BLIP
-    processor, model = load_blip_model()
-    inputs = processor(image, return_tensors="pt")
-    out = model.generate(**inputs, max_new_tokens=50)
-    caption = processor.decode(out[0], skip_special_tokens=True)
-    return caption, "BLIP"
-
-
-# def extract_item_name(image: Image.Image) -> str:
-#     processor, model = load_blip_model()
-#     inputs = processor(image, return_tensors="pt")
-#     out = model.generate(**inputs, max_new_tokens=50)
-#     caption = processor.decode(out[0], skip_special_tokens=True)
-#     return caption
-
-def fetch_youtube_videos(query: str, serp_api_key: str, max_results=3):
-    params = {"engine": "youtube", "search_query": query, "api_key": serp_api_key, "hl": "en", "gl": "in"}
-    resp = requests.get("https://serpapi.com/search.json", params=params).json()
-    videos = []
-    if "video_results" in resp:
-        for v in resp["video_results"][:max_results]:
-            thumb = v.get("thumbnail")
-            if isinstance(thumb, list) and len(thumb) > 0:
-                thumb_url = thumb[0].get("url")
-            elif isinstance(thumb, dict):
-                thumb_url = thumb.get("url")
-            else:
-                thumb_url = None
-            videos.append({"title": v.get("title"), "link": v.get("link"), "thumbnail": thumb_url})
-    return videos
-
-def fetch_product_reviews(product_id: str, serp_api_key: str, max_reviews=5):
-    params = {
-        "engine": "google_immersive_product",
-        "page_token": product_id,
-        "api_key": serp_api_key,
-        "reviews": "true",
-        "hl": "en",
-        "gl": "in"
-    }
-    try:
-        resp = requests.get("https://serpapi.com/search.json", params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        print("❌ Error fetching reviews:", e)
-        return []
-
-    product_results = data.get("product_results") or data.get("product_result") or {}
-    review_candidates = []
-    if isinstance(product_results, dict):
-        review_candidates = product_results.get("user_reviews") or product_results.get("reviews") or []
-
-    if not review_candidates:
-        review_candidates = data.get("user_reviews") or data.get("reviews_results") or data.get("reviews") or []
-
-    if isinstance(review_candidates, dict):
-        review_candidates = review_candidates.get("reviews") or review_candidates.get("user_reviews") or []
-
-    if not isinstance(review_candidates, list):
-        review_candidates = []
-
-    reviews = []
-    for r in review_candidates[:max_reviews]:
-        reviews.append({
-            "title": r.get("title") or None,
-            "rating": r.get("rating") or r.get("stars") or None,
-            "snippet": r.get("text") or r.get("snippet") or r.get("review_text") or None,
-            "date": r.get("date") or None,
-            "user": r.get("user_name") or r.get("user") or None,
-            "source": r.get("source") or None,
-            "icon": r.get("icon") or r.get("profile_photo") or None,
-            "raw": r
-        })
-    return reviews
-
-def fetch_prices_from_amazon_google(query: str, serp_api_key: str):
-    results = []
-    g_params = {"engine": "google_shopping", "q": query, "hl": "en", "gl": "in", "currency": "INR", "api_key": serp_api_key}
-    g_resp = requests.get("https://serpapi.com/search.json", params=g_params).json()
-    if "shopping_results" in g_resp:
-        for item in g_resp["shopping_results"][:8]:
-            results.append({
-                "title": item.get("title"),
-                "price": item.get("extracted_price"),
-                "source": item.get("source"),
-                "pageToken": item.get("immersive_product_page_token"),
-                "link": item.get("product_link") or item.get("link"),
-                "product_id": item.get("product_id")
-            })
-    return results
-
+    return extract_caption_with_blip(image)
+ 
 # ---------------- Step 3: Streamlit UI ----------------
 # Hide Streamlit's default toolbar and "Made with Streamlit" footer
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}    /* hides the menu */
-    header {visibility: hidden;}       /* hides the top header */
-    footer {visibility: hidden;}       /* hides the footer */
-    [data-testid="stToolbar"] {display: none;}  /* hides deploy/share/toolbar icons */
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 st.set_page_config(
     page_title="Smart Price Finder",
     page_icon="🛒",
     layout="wide"
 )
+apply_global_styles()
 st.title("🛒 Smart Price Finder from a Image")
 st.write(
     """
@@ -194,8 +41,7 @@ st.write(
     """
 )
 
-serp_api_key = st.secrets["serp_api_key"]
-
+serp_api_key = api_key=st.secrets["serp_api_key"]
 uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 
 # ---------------- Step 4: Session State ----------------
@@ -217,15 +63,41 @@ if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Image", width=300)
 
-    if not st.session_state.user_query:
+    # --- NEW: let user choose captioning method ---
+    caption_method = st.radio(
+        "Select captioning method:",
+        ["Result from Groq", "Result from Blip"],
+        index=0,
+        horizontal=True
+    )
+
+    method_map = {
+        "Result from Groq": "groq",
+        "Result from Blip": "blip"
+    }
+    selected_method = method_map[caption_method]
+
+    # Detect item if not already set OR method changed
+    if (
+        not st.session_state.user_query
+        or st.session_state.get("caption_source_method") != selected_method
+    ):
         with st.spinner("🔍 Detecting item..."):
-            detected_item, detected_source = extract_item_name(image)
+            if selected_method == "groq":
+                detected_item, detected_source = extract_item_name_groq(image)
+            elif selected_method == "blip":
+                detected_item, detected_source = extract_caption_with_blip(image)
+            else:  # auto
+                detected_item, detected_source = extract_item_name(image)
+
             st.session_state.user_query = detected_item
             st.session_state.caption_source = detected_source
+            st.session_state.caption_source_method = selected_method
 
     if "caption_source" in st.session_state:
-      st.caption(f"✅ Detected using **{st.session_state.caption_source}**")
+        st.caption(f"✅ Detected using **{st.session_state.caption_source}**")
 
+    # Allow user to refine
     user_query = st.text_area("✍️ Refine description", key="user_query")
 
     if st.button("🔎 Search Prices"):
@@ -268,97 +140,7 @@ if products:
         # 🎥 YouTube Videos
         with st.expander("📺 Related YouTube Videos"):
             videos = fetch_youtube_videos(p['title'], serp_api_key)
-            if videos:
-                # Build a card grid with hover and play overlay
-                html = """
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox.css" />
-                <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox.umd.js"></script>
-
-                <style>
-                    .video-grid {
-                        display: grid;
-                        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-                        gap: 16px;
-                        margin-top: 12px;
-                    }
-                    .video-card {
-                        position: relative;
-                        border-radius: 12px;
-                        overflow: hidden;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                        transition: transform 0.2s ease, box-shadow 0.2s ease;
-                        background: #fff;
-                    }
-                    .video-card:hover {
-                        transform: translateY(-4px);
-                        box-shadow: 0 8px 18px rgba(0,0,0,0.25);
-                    }
-                    .video-card img {
-                        width: 100%;
-                        height: 160px;
-                        object-fit: cover;
-                        display: block;
-                    }
-                    .video-title {
-                        padding: 10px;
-                        font-size: 14px;
-                        font-weight: 600;
-                        line-height: 1.3;
-                        color: #333;
-                        height: 46px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                    }
-                    .play-overlay {
-                        position: absolute;
-                        top: 0; left: 0; right: 0; bottom: 0;
-                        background: rgba(0,0,0,0.4);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        opacity: 0;
-                        transition: opacity 0.2s ease;
-                    }
-                    .video-card:hover .play-overlay {
-                        opacity: 1;
-                    }
-                    .play-overlay span {
-                        font-size: 50px;
-                        color: #fff;
-                        text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-                    }
-                </style>
-
-                <div class="video-grid">
-                """
-
-                for idx, v in enumerate(videos):
-                    video_url = v.get("link") or ""
-                    vid = ""
-                    if "watch?v=" in video_url:
-                        vid = video_url.split("watch?v=")[1].split("&")[0]
-                    elif "youtu.be/" in video_url:
-                        vid = video_url.split("youtu.be/")[1].split("?")[0]
-                    else:
-                        vid = video_url.rstrip("/").split("/")[-1] if video_url else ""
-
-                    embed_url = f"https://www.youtube.com/watch?v={vid}" if vid else video_url
-                    thumbnail = v.get("thumbnail") or (f"https://img.youtube.com/vi/{vid}/hqdefault.jpg" if vid else "")
-                    title = (v.get("title") or "").replace('"', "&quot;")
-                    modal_group = f"videos-{p_idx}"
-
-                    html += f'''
-                    <a data-fancybox="{modal_group}" data-type="iframe" data-src="{embed_url}" href="javascript:;" class="video-card">
-                        <img src="{thumbnail}" alt="{title}" />
-                        <div class="play-overlay"><span>▶</span></div>
-                        <div class="video-title">{title}</div>
-                    </a>
-                    '''
-
-                html += "</div>"
-                st.components.v1.html(html, height=520, scrolling=True)
-            else:
-                st.info("No related YouTube videos found.")
+            render_video_grid(videos, group=f"videos-{p_idx}") if videos else st.info("No related videos found.")
 
         # 📝 Reviews
         if p.get("product_id"):
