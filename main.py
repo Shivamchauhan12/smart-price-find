@@ -160,3 +160,5 @@ if products:
                         )
                 else:
                     st.info("No reviews found.")
+elif st.session_state.last_uploaded is not None and not products:
+    st.toast("⚠️ No products found. API quota might be exhausted or no matches available.", icon="⚠️")
