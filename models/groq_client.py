@@ -37,6 +37,7 @@ def extract_item_name_groq(image: Image.Image):
                 }
             ],
             max_tokens=100,
+            temperature=0.1,
         )
 
         caption = response.choices[0].message.content.strip()
@@ -50,4 +51,5 @@ def extract_item_name_groq(image: Image.Image):
         else:
             print("❌ Groq error:", e)
             return None, None
+
 
