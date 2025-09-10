@@ -107,8 +107,12 @@ if uploaded_file:
     user_query = st.text_area("✍️ Refine description", key="user_query")
 
     if st.button("🔎 Search Prices"):
+        st.session_state.search_clicked = True
         with st.spinner(f"💰 Fetching prices for {user_query}..."):
             st.session_state.products = fetch_prices_from_amazon_google(user_query, serp_api_key)
+    # Initialize flag if not present
+    if "search_clicked" not in st.session_state:
+        st.session_state.search_clicked = False
 
 # ---------------- Step 6: Render Products ----------------
 products = st.session_state.products
@@ -160,5 +164,5 @@ if products:
                         )
                 else:
                     st.info("No reviews found.")
-elif st.session_state.last_uploaded is not None and not products:
+elif st.session_state.search_clicked and not products:
     st.toast("⚠️ No products found. API quota might be exhausted or no matches available.", icon="⚠️")
