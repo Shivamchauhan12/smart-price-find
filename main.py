@@ -33,11 +33,9 @@ st.title("🛒 Smart Price Finder from a Image")
 st.write(
     """
     Upload **product image**, and I’ll do the rest:
-    - 🔍 Detect and recognize the item automatically  
-    - ✍️ refine text automatically  
+    - 🔍 Detect and recognize the item automatically 
     - 💲 Fetch live prices from multiple sources   
-    - ▶️ Show related YouTube reviews and demos 
-    - 🖼️ display product reviews  
+    - ▶️ Show related YouTube demos and reviews 
     """
 )
 
