@@ -62,7 +62,7 @@ if uploaded_file:
     st.image(image, caption="Uploaded Image", width=300)
 
     # --- NEW: let user choose captioning method ---
-        st.markdown(
+    st.markdown(
         """
         **ℹ️ Captioning Methods**
         - 🔵 **Groq (Paid/Token-based)** → It may fail if quota is over.  
