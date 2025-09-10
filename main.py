@@ -2,6 +2,8 @@ import os
 os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 import streamlit as st
 import requests
+import base64
+from groq import Groq
 from PIL import Image
 import torch
 from transformers.models.blip import BlipProcessor, BlipForConditionalGeneration
@@ -14,12 +16,78 @@ def load_blip_model():
     model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
     return processor, model
 
-def extract_item_name(image: Image.Image) -> str:
+@st.cache_resource
+def load_groq_client():
+    return Groq(api_key=st.secrets["groq_api_key"])
+    
+
+def extract_item_name_groq(image: Image.Image):
+    """Try to get caption from Groq API (llama-4-scout)."""
+    client = load_groq_client()
+
+    import io, base64
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG")
+    img_bytes = buf.getvalue()
+    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+
+    try:
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Describe the product in this image briefly (just the product and brand name, no extra text)."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{img_b64}"
+                            }
+                        }
+                    ],
+                }
+            ],
+            max_tokens=100,
+        )
+
+        # ✅ Use .content instead of ["content"]
+        print(response)
+        caption = response.choices[0].message.content.strip()
+        return caption, "Groq"
+
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "rate limit" in err_msg or "quota" in err_msg or "429" in err_msg:
+            print("⚠️ Groq quota/rate limit exceeded, falling back to BLIP.")
+            return None, None
+        else:
+            print("❌ Groq error:", e)
+            return None, None
+
+def extract_item_name(image: Image.Image):
+    # Try Groq first
+    caption, source = extract_item_name_groq(image)
+    if caption:
+        return caption, source
+
+    # Fallback → BLIP
     processor, model = load_blip_model()
     inputs = processor(image, return_tensors="pt")
     out = model.generate(**inputs, max_new_tokens=50)
     caption = processor.decode(out[0], skip_special_tokens=True)
-    return caption
+    return caption, "BLIP"
+
+
+# def extract_item_name(image: Image.Image) -> str:
+#     processor, model = load_blip_model()
+#     inputs = processor(image, return_tensors="pt")
+#     out = model.generate(**inputs, max_new_tokens=50)
+#     caption = processor.decode(out[0], skip_special_tokens=True)
+#     return caption
 
 def fetch_youtube_videos(query: str, serp_api_key: str, max_results=3):
     params = {"engine": "youtube", "search_query": query, "api_key": serp_api_key, "hl": "en", "gl": "in"}
@@ -87,7 +155,7 @@ def fetch_prices_from_amazon_google(query: str, serp_api_key: str):
     g_params = {"engine": "google_shopping", "q": query, "hl": "en", "gl": "in", "currency": "INR", "api_key": serp_api_key}
     g_resp = requests.get("https://serpapi.com/search.json", params=g_params).json()
     if "shopping_results" in g_resp:
-        for item in g_resp["shopping_results"][:5]:
+        for item in g_resp["shopping_results"][:8]:
             results.append({
                 "title": item.get("title"),
                 "price": item.get("extracted_price"),
@@ -151,8 +219,12 @@ if uploaded_file:
 
     if not st.session_state.user_query:
         with st.spinner("🔍 Detecting item..."):
-            detected_item = extract_item_name(image)
+            detected_item, detected_source = extract_item_name(image)
             st.session_state.user_query = detected_item
+            st.session_state.caption_source = detected_source
+
+    if "caption_source" in st.session_state:
+      st.caption(f"✅ Detected using **{st.session_state.caption_source}**")
 
     user_query = st.text_area("✍️ Refine description", key="user_query")
 
@@ -164,6 +236,25 @@ if uploaded_file:
 products = st.session_state.products
 if products:
     st.subheader(f"Results for: {st.session_state.user_query}")
+
+  # ✅ Sorting + Filter options
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        sort_order = st.radio(
+            "Sort by price:",
+            ["High → Low", "Low → High"],
+            index=0,  # ✅ Default to High → Low
+            horizontal=True
+        )
+  
+    products = [p for p in products if p["price"] is not None]
+
+    # ✅ Apply sorting
+    if sort_order == "High → Low":
+        products = sorted(products, key=lambda x: x["price"] if x["price"] is not None else 0, reverse=True)
+    else:
+        products = sorted(products, key=lambda x: x["price"] if x["price"] is not None else 0)
+
     
     for p_idx, p in enumerate(products):
         price_display = f"₹{p['price']}" if p['price'] else "N/A"
