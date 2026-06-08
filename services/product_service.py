@@ -1,5 +1,6 @@
 
 import requests
+from urllib.parse import quote_plus
 
 def fetch_product_reviews(product_id: str, serp_api_key: str, max_reviews=5):
     params = {
@@ -46,18 +47,46 @@ def fetch_product_reviews(product_id: str, serp_api_key: str, max_reviews=5):
         })
     return reviews
 
+
+
 def fetch_prices_from_amazon_google(query: str, serp_api_key: str):
     results = []
-    g_params = {"engine": "google_shopping", "q": query, "hl": "en", "gl": "in", "currency": "INR", "api_key": serp_api_key}
-    g_resp = requests.get("https://serpapi.com/search.json", params=g_params).json()
+    g_params = {
+        "engine": "google_shopping", 
+        "q": query, 
+        "hl": "en", 
+        "gl": "in", 
+        "currency": "INR", 
+        "api_key": serp_api_key
+    }
+    
+    try:
+        g_resp = requests.get("https://serpapi.com/search.json", params=g_params, timeout=15).json()
+    except Exception as e:
+        print("❌ Error fetching shopping data:", e)
+        return []
+
     if "shopping_results" in g_resp:
         for item in g_resp["shopping_results"][:8]:
+            product_id = item.get("product_id")
+            
+            link = item.get("product_link") or item.get("link")
+            
+            if not link and product_id:
+                link = f"https://www.google.com/shopping/product/{product_id}?hl=en&gl=in"
+            elif not link:
+                link = f"https://www.google.com/search?tbm=shop&q={quote_plus(query)}"
+            
+            # --- FIX: Encode the final URL so spaces don't break Markdown ---
+            # requests.utils.requote_uri handles full URLs perfectly without breaking http:// protocols
+            safe_link = requests.utils.requote_uri(link) if link else None
+            
             results.append({
                 "title": item.get("title"),
                 "price": item.get("extracted_price"),
                 "source": item.get("source"),
                 "pageToken": item.get("immersive_product_page_token"),
-                "link": item.get("product_link") or item.get("link"),
-                "product_id": item.get("product_id")
+                "link": safe_link,
+                "product_id": product_id
             })
     return results
