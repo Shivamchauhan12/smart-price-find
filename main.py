@@ -61,12 +61,12 @@ if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Image", width=300)
 
-    # --- NEW: let user choose captioning method ---
+    # --- Let user choose captioning method ---
     st.markdown(
         """
         **ℹ️ Captioning Methods**
-        - 🔵 **Groq (Paid/Token-based)** → It may fail if quota is over.  
-        - 🟢 **BLIP (Free)** → Always available.  
+        - 🔵 **Groq (Free/Token-limited)** → Uses Groq vision API; auto-falls back to BLIP if unavailable.  
+        - 🟢 **BLIP (Local/Always Free)** → Runs locally, always available.  
         """
     )
 
@@ -89,18 +89,28 @@ if uploaded_file:
         or st.session_state.get("caption_source_method") != selected_method
     ):
         with st.spinner("🔍 Detecting item..."):
+            detected_item = None
+            detected_source = None
+            groq_fallback = False
+
             if selected_method == "groq":
                 detected_item, detected_source = extract_item_name_groq(image)
-            elif selected_method == "blip":
+                # If Groq failed / no vision model available, fall back to BLIP
+                if not detected_item:
+                    groq_fallback = True
+                    detected_item, detected_source = extract_caption_with_blip(image)
+            else:  # blip
                 detected_item, detected_source = extract_caption_with_blip(image)
-            else:  # auto
-                detected_item, detected_source = extract_item_name(image)
 
-            st.session_state.user_query = detected_item
+            st.session_state.user_query = detected_item or ""
             st.session_state.caption_source = detected_source
             st.session_state.caption_source_method = selected_method
+            st.session_state.groq_fallback = groq_fallback
 
-    if "caption_source" in st.session_state:
+    if st.session_state.get("groq_fallback") and selected_method == "groq":
+        st.warning("⚠️ Groq vision models are unavailable on your current plan. Auto-switched to BLIP (local).")
+
+    if st.session_state.get("caption_source"):
         st.caption(f"✅ Detected using **{st.session_state.caption_source}**")
 
     # Allow user to refine
