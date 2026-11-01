@@ -3,7 +3,7 @@ os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 import streamlit as st
 from PIL import Image
 from models.blip_model import extract_caption_with_blip
-from models.groq_client import extract_item_name_groq
+from models.nuextract3_model import extract_caption_nuextract3
 from services.product_service import fetch_prices_from_amazon_google, fetch_product_reviews
 from services.youtube_service import fetch_youtube_videos
 from utils.ui_helpers import apply_global_styles, render_video_grid
@@ -12,8 +12,8 @@ from utils.ui_helpers import apply_global_styles, render_video_grid
 
 # ---------------- Step 1: Load Models ----------------    
 def extract_item_name(image: Image.Image):
-    # Try Groq first
-    caption, source = extract_item_name_groq(image)
+    # Try NuExtract3 first
+    caption, source = extract_caption_nuextract3(image)
     if caption:
         return caption, source
 
@@ -65,20 +65,20 @@ if uploaded_file:
     st.markdown(
         """
         **ℹ️ Captioning Methods**
-        - 🔵 **Groq (Free/Token-limited)** → Uses Groq vision API; auto-falls back to BLIP if unavailable.  
-        - 🟢 **BLIP (Local/Always Free)** → Runs locally, always available.  
+        - 🟣 **NuExtract3 (HuggingFace)** → Uses the NuExtract3 model for high-quality captions.
+        - 🟢 **BLIP (Local/Always Free)** → Runs locally, always available.
         """
     )
 
     caption_method = st.radio(
         "Select captioning method:",
-        ["Result from Groq", "Result from Blip"],
+        ["Result from NuExtract3", "Result from Blip"],
         index=0,
         horizontal=True
     )
 
     method_map = {
-        "Result from Groq": "groq",
+        "Result from NuExtract3": "nuextract3",
         "Result from Blip": "blip"
     }
     selected_method = method_map[caption_method]
@@ -93,9 +93,9 @@ if uploaded_file:
             detected_source = None
             groq_fallback = False
 
-            if selected_method == "groq":
-                detected_item, detected_source = extract_item_name_groq(image)
-                # If Groq failed / no vision model available, fall back to BLIP
+            if selected_method == "nuextract3":
+                detected_item, detected_source = extract_caption_nuextract3(image)
+                # If NuExtract3 failed, fall back to BLIP
                 if not detected_item:
                     groq_fallback = True
                     detected_item, detected_source = extract_caption_with_blip(image)
@@ -107,8 +107,8 @@ if uploaded_file:
             st.session_state.caption_source_method = selected_method
             st.session_state.groq_fallback = groq_fallback
 
-    if st.session_state.get("groq_fallback") and selected_method == "groq":
-        st.warning("⚠️ Groq vision models are unavailable on your current plan. Auto-switched to BLIP (local).")
+    if st.session_state.get("groq_fallback") and selected_method == "nuextract3":
+        st.warning("⚠️ NuExtract3 model failed. Auto-switched to BLIP (local).")
 
     if st.session_state.get("caption_source"):
         st.caption(f"✅ Detected using **{st.session_state.caption_source}**")
